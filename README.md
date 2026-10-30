@@ -20,7 +20,7 @@ Data attribution: MacroRadar (macroradar.io). Model outputs are historical indic
 | Endpoint | `https://zfm3jdiqusemt3zuwtia2ywh3u0uvxph.lambda-url.us-east-1.on.aws/` (stack output `FunctionUrl`) |
 | Secret | `macroradar-mcp/config` — `bearer_token` only (the API itself is keyless) |
 | Logs | `/aws/lambda/macroradar-mcp` (30-day retention) |
-| Warm-up | EventBridge Scheduler `macroradar-mcp-warmup`: `/health` invoke at 6:30 America/Chicago, Mon–Fri |
+| Warm-up | EventBridge Scheduler `macroradar-mcp-warmup`: `/health` invoke every 3 min, 6:30–6:45 America/Chicago, Mon–Fri |
 | claude.ai connector | `MacroRadar` (custom connector, "No sign in", `Authorization: Bearer <token>` header) |
 
 ## How it works
@@ -32,7 +32,7 @@ Data attribution: MacroRadar (macroradar.io). Model outputs are historical indic
 - **Caching:** GET responses are cached in memory for 15 minutes per warm Lambda instance (MacroRadar asks callers to cache; its edge caches for an hour). POSTs (`run_study`, `run_exposure`) are not cached.
 - **Retries:** 429 and 5xx are retried twice with backoff; other 4xx are returned immediately.
 - **`/health`:** unauthenticated (any method) and returns `{"ok": true}` — or 503 `{"ok": false}` if the secret can't be loaded. It does the same cold-start work as a real request (imports, boto3, Secrets Manager client, secret fetch) and returns nothing else.
-- **Warm-up:** an EventBridge Scheduler schedule (`macroradar-mcp-warmup`) invokes the function with a `/health` event at 6:30 America/Chicago on weekdays — five minutes before the 6:35 CT morning-brief scheduled task — so the task's connector doesn't hit a cold start and report the server unavailable. The schedule uses the Chicago timezone so it follows DST along with the task (11:30 UTC in summer, 12:30 UTC in winter). If the task's time changes, change `ScheduleExpression` in `build_template.py` to match.
+- **Warm-up:** an EventBridge Scheduler schedule (`macroradar-mcp-warmup`) invokes the function with a `/health` event every 3 minutes from 6:30 to 6:45 America/Chicago on weekdays, bracketing the 6:35 CT morning-brief scheduled task (which can start a few minutes late), so the task's connector doesn't hit a cold start and report the server unavailable. One 6:30 ping wasn't enough margin: an idle environment can be reclaimed within minutes. The schedule uses the Chicago timezone so it follows DST along with the task (11:30–11:45 UTC in summer, 12:30–12:45 UTC in winter). If the task's time changes, change `ScheduleExpression` in `build_template.py` to match.
 - **IAM:** the function role can write its own log group and read its one secret.
 
 ## Files
